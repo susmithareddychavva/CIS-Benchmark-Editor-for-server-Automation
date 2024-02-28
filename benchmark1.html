@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+ 
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XML File Display and Editing</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+ 
+        table {
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+ 
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+ 
+        th {
+            background-color: #f2f2f2;
+        }
+ 
+        textarea {
+            width: 300px;
+            height: 45px;
+        }
+ 
+        button {
+            margin-top: 10px;
+            padding: 5px;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+ 
+        #details {
+            margin-top: 20px;
+        }
+ 
+        label {
+            display: inline-block;
+            width: 150px;
+            margin-bottom: 5px;
+        }
+ 
+        input,
+        select {
+            width: 300px;
+            margin-bottom: 10px;
+        }
+ 
+        .highlight {
+            background-color: #706b65;
+        }
+ 
+        button i {
+            margin-right: 5px;
+        }
+ 
+        #addRuleBtn,
+        #submitBtn {
+            display: none;
+        }
+       
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+ 
+    <script>
+        function displayReferencesInTable(xml) {
+            var references = $(xml).find("post_remediation").map(function () {
+                return {
+                    name: $(this).find("name").text(),
+                    scriptType: $(this).find("script_type").text(),
+                    script: $(this).find("script").text()
+                };
+            }).get();
+       
+            // Clear the existing table content
+            $("#yourTableId").empty();
+       
+            // Iterate through post_remediation elements in the XML and add rows to the table
+            $.each(references, function (index, value) {
+                var deleteButton = "<button onclick='handleDeletePostRemediationClick(\"" + value.name + "\")'>Delete</button>"
+                $("#yourTableId").append("<tr><td>" + value.name + "</td><td>" + value.scriptType + "</td><td>" + value.script + "</td></tr>");
+                $("#yourTableId").append("<tr><td>" + value.name + "</td><td>" + value.scriptType + "</td><td>" + value.script + "</td><td>" + deleteButton + "</td></tr>");
+            });
+            handleRemediateClick(); // Assuming this function needs to be called after updating the table
+        }
+
+
+       
+        $(document).ready(function () {
+ 
+            $("#check_nameDropdown").select2();
+ 
+        });
+ 
+        var xmlDoc;
+        var editedReference = '';
+        var newRuleInMemory = {};
+ 
+        function createPostRemediateTable(xml) {
+            var postRemediations = $(xml).find("post_remediation").map(function () {
+                return $(this).find("name").text();
+            }).get();
+       
+            var table = "<table id='postRemediationsTable'><tr><th>Post Remediation</th></tr>";
+       
+            $.each(postRemediations, function (index, value) {
+                table += "<tr onclick='handleRemediateClick(this)'><td>" + value + "</td></tr>";
+            });
+       
+            table += "</table>";
+            $("#postRemediationsTable").html(table);
+            $("#postRemediationsTable").show();
+        }
+       
+        // Modify the handleFileSelect function to call createPostRemediateTable
+        function handleFileSelect(event) {
+            var file = event.target.files[0];
+            var reader = new FileReader();
+       
+            reader.onload = function (e) {
+                xmlDoc = $.parseXML(e.target.result);
+                displayAdditionalFeatures(xmlDoc);
+       
+                createPostRemediateTable(xmlDoc); // Update this line
+       
+                displayReferencesInTable(xmlDoc);
+       
+                $('#addRuleBtn, #submitBtn').show();
+                fetchCheckNames();
+            };
+       
+            reader.readAsText(file);
+        }
+        function displayAdditionalFeatures(xml) {
+            var title = $(xml).find("title").text();
+            var description = $(xml).find("description").text();
+            var platform = $(xml).find("applicable_platform").text();
+            var controlLibrary = $(xml).find("prerequisite_control_library").text();
+ 
+            var titleInput = "<input type='text' id='titleInput' value='" + title + "'>";
+            $("#title").html("<label for='titleInput'>Title:</label>" + titleInput);
+ 
+            var descriptionInput = "<textarea id='descriptionInput'>" + description + "</textarea>";
+            $("#description").html("<label for='descriptionInput'>Description:</label>" + descriptionInput);
+ 
+            $("#applicablePlatform").text("Applicable Platform: " + platform);
+ 
+            var platformDropdown = "<select id='platformDropdown'>";
+            platformDropdown += "<option value='Unix'>Unix</option>";
+            platformDropdown += "<option value='Windows'>Windows</option>";
+            platformDropdown += "</select>";
+ 
+            $("#applicablePlatformDropdown").html("Applicable Platform: " + platformDropdown);
+ 
+            var libraryDropdown = "<select id='libraryDropdown'>";
+            libraryDropdown += "<option value='Unix Control Library'>Compliance library for Unix</option>";
+            libraryDropdown += "<option value='Windows Control Library'>Compliance library for Windows</option>";
+            libraryDropdown += "</select>";
+ 
+            $("#controlLibraryDropdown").html("Prerequisite Control Library: " + libraryDropdown);
+        }
+ 
+        function displayReferencesInTable(xml) {
+            var references = $(xml).find("rule").map(function () {
+                return $(this).find("reference").text();
+            }).get();
+ 
+            var table = "<table><tr><th>Rules</th> </tr>";
+            $.each(references, function (index, value) {
+                table += "<tr onclick='handleReferenceClick(this)'><td>" + value + "</td></tr>";
+ 
+            });
+            table += "</table>";
+ 
+            $("#referencesTable").html(table);
+            $("#details").empty();
+        }
+        function fetchCheckNames(callback) {
+    $.ajax({
+        url: 'http://127.0.0.1:5000/get_check_names',
+        type: 'GET',
+        success: function (data) {
+            console.log('Fetched check names successfully:', data);
+            if (callback) {
+                callback(data);  
+            }
+        },
+        error: function (error) {
+            console.error('Error fetching check names:', error);
+        }
+    });
+}
+function fetchCheckGuids(checkNames, callback) {
+        $.ajax({
+            url: 'http://127.0.0.1:5000/get_check_guids',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ checkNames: checkNames }),
+            success: function (data) {
+                console.log('Fetched check GUIDs successfully:', data);
+                if (callback) {
+                    callback(data);
+                }
+            },
+            error: function (error) {
+                console.error('Error fetching check GUIDs:', error);
+            }
+        });
+    }
+    function populateCheckNamesDropdown(checkNames) {
+    var checkNameDropdown = $("#check_nameDropdown");
+    checkNameDropdown.empty();
+ 
+    if (checkNames && checkNames.length > 0) {
+        checkNameDropdown.select2({
+            data: checkNames.map(function (name) {
+                return { id: name, text: name };
+            }),
+            placeholder: "Search for a check name...",
+            allowClear: true
+        });
+    } else {
+        console.error("Empty or undefined check names array.");
+    }
+ 
+   
+    checkNameDropdown.on('change', function () {
+        var selectedCheckName = $(this).val();
+        fetchCheckGuids([selectedCheckName], function (checkGuids) {
+           
+            $('#check_guid').val(checkGuids[0]);
+        });
+    });
+}
+function handleAddPostRemediation() {
+    var defaultScriptType = '.';
+    var defaultScript = '.';
+ 
+    var details = "<div id='details'><h2>Add New Post Remediation Rule</h2>";
+    details += "<label for='postRemediationName'>Name:</label><input type='text' id='postRemediationName'><br>";
+    details += "<label for='postRemediationScriptType'>Script Type:</label>";
+    details += "<select id='postRemediationScriptTypeDropdown'>";
+    details += "<option value='sh'>SH</option>";
+    details += "<option value='Python'>Python</option>";
+    details += "</select><br>";
+    details += "<label for='postRemediationScript'>Script:</label><input type='text' id='postRemediationScript' value='" + defaultScript + "'><br>";
+    details += "<button onclick='handleSavePostRemediation()'>Save Changes</button>";
+    details += "<button onclick='handleCancelPostRemediationClick()'>Cancel</button></div>";
+ 
+    $("body").append(details);
+}
+ 
+ 
+function handleCancelPostRemediationClick() {
+    $(".highlight").removeClass("highlight");
+    $("[id^='details']").remove();
+}
+ 
+ 
+function populateScriptTypeDropdown(scriptTypeFromXML) {
+    // Your existing logic to populate options
+    var options = "<option value='sh'>SH</option>";
+    options += "<option value='Python'>Python</option>";
+    $('#scriptTypedropdown').html(options);
+ 
+    // Set the selected option in the dropdown
+    $('#scriptTypedropdown').val(scriptTypeFromXML || 'sh'); // Set a default value if scriptTypeFromXML is undefined
+}
+ 
+function handleRemediateClick(row) {
+    var reference = $(row).find("td").text();
+    var postRemediation = $(xmlDoc).find("post_remediation").filter(function () {
+        return $(this).find("name").text() == reference;
+    });
+ 
+    $(".highlight").removeClass("highlight");
+    $(row).addClass("highlight");
+ 
+    $("[id^='details-']").remove();
+ 
+    if (postRemediation.length > 0) {
+        var detailsId = 'details-' + reference;
+ 
+        var details = "<div id='" + detailsId + "' style='white-space: pre-line;'><h2>Post Remediation Details</h2>";
+        details += "<label for='postRemediationName'>Name:</label>";
+        details += "<textarea id='postRemediationName' class='editable'>" + postRemediation.find("name").text() + "</textarea><br>";
+ 
+        // Add contenteditable attributes for scriptType and script
+        details += "<label for='postRemediationScriptType'>Script Type:</label>";
+        details += "<select id='scriptTypedropdown'></select><br>";
+        details += "<label for='postRemediationScript'>Script:</label>";
+        details += "<textarea id='postRemediationScript' class='editable'>" + postRemediation.find("script").text() + "</textarea><br>";
+ 
+        details += "<button onclick='handleUpdatePostRemediationClick(\"" + reference + "\")'>Update Changes</button>";
+        details += "<button onclick='handleDeletePostRemediationClick(\"" + reference + "\")'>Delete</button>";
+        details += "<button onclick='handleCancelPostRemediationClick()'>Cancel</button></div>";
+ 
+        $(row).after(details);
+ 
+        // Call the function to populate and set the selected option in the dropdown
+        populateScriptTypeDropdown(postRemediation.find("script_type").text());
+ 
+        // Add an input event to update the XML data when the content is modified
+        $('#' + detailsId + ' #postRemediationName').on('input', function () {
+            var updatedName = $(this).val().trim();
+            updatePostRemediationField(postRemediation, "name", updatedName);
+        });
+ 
+        // Add a click event to make the content editable
+        $('#' + detailsId + ' .editable').on('click', function () {
+            $(this).attr('contenteditable', true);
+        });
+ 
+        // Add a blur event to save changes when focus is lost
+        $('#' + detailsId + ' .editable').on('blur', function () {
+            var fieldName = $(this).attr('id');
+            var newValue = $(this).val().trim();
+            updatePostRemediationField(postRemediation, fieldName, newValue);
+        });
+    }
+}
+function handleDeletePostRemediationClick(reference) {
+    var confirmation = confirm("Are you sure you want to delete " + reference + " post remediation?");
+    
+    if (confirmation) {
+        // Use not() instead of filter() to remove the correct post remediation
+        $(xmlDoc).find("post_remediation:has(name:contains('" + reference + "'))").remove();
+
+        // Update the table immediately after deleting
+        displayReferencesInTable(xmlDoc);
+        createPostRemediateTable(xmlDoc);
+
+        $("[id^='details-']").remove(); // Remove details div for the deleted post remediation
+    }
+}
+
+ 
+function updatePostRemediationField(postRemediation, fieldName, newValue) {
+    // Update the XML data with the new value
+    postRemediation.find(fieldName).text(newValue);
+    // Save the XML or perform any other necessary actions
+ 
+    // After updating the XML, refresh the displayed references in the table
+    displayReferencesInTable(xmlDoc);
+}
+ 
+ 
+function handleUpdatePostRemediationClick(reference) {
+    var postRemediation = $(xmlDoc).find("post_remediation").filter(function () {
+        return $(this).find("name").text() == reference;
+    });
+ 
+    if (postRemediation.length > 0) {
+        // Get the updated name from the contenteditable field
+        var updatedName = $('#postRemediationName').val(); // Use val() for textarea
+ 
+        // Update the reference variable with the new name
+        reference = updatedName;
+ 
+        // Update the name in the XML data with the new value
+        updatePostRemediationField(postRemediation, "name", updatedName);
+       
+        // Update script type using the selected value from the dropdown
+        var updatedScriptType = $('#scriptTypedropdown').val();
+        updatePostRemediationField(postRemediation, "script_type", updatedScriptType);
+ 
+        // Update script using val() for textarea
+        updatePostRemediationField(postRemediation, "script", $('#postRemediationScript').val());
+        $('#scriptTypedropdown').val(updatedScriptType);
+    }
+ 
+ 
+ 
+    // Clear the details and remove the highlight
+    $(".highlight").removeClass("highlight");
+    $("[id^='details-']").remove();
+ 
+    // Recreate the table with the updated data
+    createPostRemediateTable(xmlDoc);
+ 
+    // Assuming you need to call handleRemediateClick after updating the table
+    handleRemediateClick();
+}
+ 
+function handleSavePostRemediation() {
+    var postRemediationName = $("#details #postRemediationName").val();
+    var postRemediationScriptType = $("#details #postRemediationScriptTypeDropdown").val();
+    var postRemediationScript = $("#details #postRemediationScript").val();
+ 
+    // Assuming xmlDoc is the XML document
+    var newPostRemediation = xmlDoc.createElement("post_remediation");
+ 
+    var nameElement = xmlDoc.createElement("name");
+    nameElement.appendChild(xmlDoc.createTextNode(postRemediationName));
+    newPostRemediation.appendChild(nameElement);
+ 
+    var scriptTypeElement = xmlDoc.createElement("script_type");
+    scriptTypeElement.appendChild(xmlDoc.createTextNode(postRemediationScriptType));
+    newPostRemediation.appendChild(scriptTypeElement);
+ 
+    var scriptElement = xmlDoc.createElement("script");
+    scriptElement.appendChild(xmlDoc.createTextNode(postRemediationScript));
+    newPostRemediation.appendChild(scriptElement);
+ 
+    xmlDoc.getElementsByTagName("post_remediations")[0].appendChild(newPostRemediation);
+ 
+    createPostRemediateTable(xmlDoc);
+    $("#details").empty();
+}
+ 
+ 
+ 
+ 
+    function handleReferenceClick(row) {
+    var reference = $(row).find("td").text();
+    var rule = $(xmlDoc).find("rule").filter(function () {
+        return $(this).find("reference").text() == reference;
+    });
+ 
+    $(".highlight").removeClass("highlight");
+    $(row).addClass("highlight");
+ 
+    $("[id^='details-']").remove();
+ 
+    if (rule.length > 0) {
+        var detailsId = 'details-' + reference;
+ 
+        var details = "<div id='" + detailsId + "'><h2>Edit Rule</h2>";
+        details += "<label for='reference'>Reference:</label><textarea id='referenceInput'>" + reference + "</textarea><br>";
+ 
+        details += "<label for='check_name'>Check Name:</label>";
+        details += "<select id='check_nameDropdown'>";
+        details += "</select><br>";
+ 
+        details += "<label for='check_guid'>Check Guid:</label><input type='text' id='check_guid' value='" + rule.find("check_guid").text() + "'><br>";
+        details += "<div style='text-align: left;'><b><label for='comparison_arg' style='font-size: 18px;'>Comparison Arg</label></b></div>";
+        details += "<div style='margin-top: 10px;'></div>";
+        details += "<label for='comparison_arg'>Value :</label><input type='text' id='comparison_arg' value='" + rule.find("comparison_arg").text() + "'>";
+ 
+        details += "<div id='comparisonArgsColumns'>";
+        details += "<label for='datatype'>Datatype:</label>";
+        details += "<select id='datatypeDropdown'>";
+            details += "<option value=''></option>";
+        details += "<option value='string'>String</option>";
+        details += "<option value='number'>Number</option>";
+        details += "<option value='exitcode'>Exit code</option>";
+        details += "</select><br>";
+ 
+        details += "<label for='operator'>Operator:</label>";
+        details += "<select id='operatorDropdown'>";
+            details += "<option value=''></option>";
+        details += "<option value='equals'>Equals</option>";
+        details += "<option value='greater than'>Greater Than</option>";
+        details += "<option value='not equals'>Not Equals</option>";
+        details += "<option value='lesser than'>Lesser Than</option>";
+        details += "<option value='less than or equal'>Less Than or equal</option>";
+        details += "<option value='greater than or equal'>Greater Than or equal</option>";
+        details += "<option value='matches re'>Matches RE</option>";
+        details += "<option value='does not matches re'>Does not Matches RE</option>";
+        details += "<option value='matches re'>Matches RE</option>";
+        details += "</select><br>";
+ 
+        details += "<label for='case_ignore'>Case Ignore:</label>";
+        details += "<select id='caseIgnoreDropdown'>";
+            details += "<option value=''></option>";
+        details += "<option value='true'>True</option>";
+        details += "<option value='false'>False</option>";
+        details += "</select>";
+        details += "</div>";
+ 
+        details += "<br>";
+        details += "<div style='text-align: left;'><b><label for='audit_args' style='font-size: 18px;'>Audit Args</label></b></div>";
+                details += "<div style='margin-top: 10px;'></div>";
+ 
+                rule.find("audit_args value").each(function (index, value) {
+                    details += "<label for='audit_args_" + (index + 1) + "'>Audit Arg " + (index + 1) + ":</label>";
+                    details += "<input type='text' id='audit_args_" + (index + 1) + "' value='" + $(value).text() + "'><br>";
+                });
+ 
+                details += "<div style='text-align: left;'><b><label for='remediation_args' style='font-size: 18px;'>Remediation Args</label></b></div>";
+                details += "<div style='margin-top: 10px;'></div>";
+ 
+                rule.find("remediation_args value").each(function (index, value) {
+                    details += "<label for='remediation_args_" + (index + 1) + "'>Remediation Arg " + (index + 1) + ":</label>";
+                    details += "<input type='text' id='remediation_args_" + (index + 1) + "' value='" + $(value).text() + "'><br>";
+                });
+ 
+ 
+        details += "<button onclick='handleUpdateClick(\"" + reference + "\")'>Update Changes</button>";
+        details += "<button onclick='handleDeleteClick(\"" + reference + "\")'>Delete Rule</button>";
+        details += "<button onclick='handleCancelClick()'>Cancel</button></div>";
+ 
+        $(row).after(details);
+        fetchCheckNames(function (checkNames) {
+            populateCheckNamesDropdown(checkNames);
+ 
+           
+            var defaultCheckName = rule.find("check_name").text();
+            $('#check_nameDropdown').append($('<option>', { value: defaultCheckName, text: defaultCheckName }))
+                .val(defaultCheckName)
+                .trigger('change');
+   
+                var defaultCheckGuid=rule.find("check_guid").text();
+           
+            fetchCheckGuids([defaultCheckName], function (checkGuids) {
+                $('#check_guid').val(defaultCheckGuid);
+            });
+        });
+ 
+       
+        $('#datatypeDropdown').val(rule.find("comparison_arg").attr("datatype") || 'string');
+        $('#operatorDropdown').val(rule.find("comparison_arg").attr("operator") || 'equals');
+        $('#caseIgnoreDropdown').val(rule.find("comparison_arg").attr("case_ignore") || 'true');
+ 
+        $('#' + detailsId + ' #referenceInput').on('input', function () {
+            editedReference = $(this).val();
+        });
+    }
+}
+ 
+function filterCheckNames() {
+    var searchInput = $('#searchCheckName').val().toLowerCase();
+    var checkNamesDropdown = $('#check_nameDropdown');
+ 
+    checkNamesDropdown.find('option').each(function () {
+        var checkName = $(this).text().toLowerCase();
+        $(this).toggle(checkName.includes(searchInput));
+    });
+}
+ 
+       
+ 
+        function getCheckGuidByCheckName(checkName) {
+            var rule = $(xmlDoc).find("rule:has(check_name:contains('" + checkName + "'))");
+            return rule.find("check_guid").text();
+        }
+ 
+        function handleUpdateClick(reference) {
+            var rule = $(xmlDoc).find("rule").filter(function () {
+                return $(this).find("reference").text() == reference;
+            });
+ 
+            if (rule.length > 0) {
+                updateRuleFromForm(rule);
+                updateAuditArgsValues(rule);
+                updateRemediationArgsValues(rule);
+                updateDropdownValues();
+            }
+ 
+            displayReferencesInTable(xmlDoc);
+            $("#details").empty();
+        }
+ 
+        function updateAuditArgsValues(rule) {
+   
+    var auditArgsValue1 = $("#audit_args_1").val();
+    var auditArgsValue2 = $("#audit_args_2").val();
+ 
+ 
+    rule.find("audit_args value").eq(0).text(auditArgsValue1);
+    rule.find("audit_args value").eq(1).text(auditArgsValue2);
+}
+function updateRemediationArgsValues(rule) {
+    displayReferencesInTable(xmlDoc);
+    var remediationArgsValue1 = $("#remediation_args_1").val();
+    var remediationArgsValue2 = $("#remediation_args_2").val();
+ 
+    rule.find("remediation_args value").eq(0).text(remediationArgsValue1);
+    rule.find("remediation_args value").eq(1).text(remediationArgsValue2);
+}
+        function handleDeleteClick(reference) {
+            var confirmation = confirm("Are you sure you want to delete "+reference +" this rule ?");
+            if (confirmation) {
+                $(xmlDoc).find("rule").filter(function () {
+                    return $(this).find("reference").text() == reference;
+                }).remove();
+ 
+                displayReferencesInTable(xmlDoc);
+                $("#details").empty();
+            }
+        }
+ 
+        function handleCancelClick() {
+            $(".highlight").removeClass("highlight");
+            $("[id^='details-']").remove();    
+   
+            $("#details").empty();
+        }
+        var auditArgCounter = 1;
+        var remediationArgCounter = 1;
+ 
+        function handleAddAuditArg() {
+    auditArgCounter++;
+    var newAuditArgInput = "<label for='audit_args_" + auditArgCounter + "'>Audit Arg " + auditArgCounter + ":</label>";
+    newAuditArgInput += "<input type='text' id='audit_args_" + auditArgCounter + "'><br>";
+    $("#auditArgsColumns").append(newAuditArgInput);
+}
+ 
+function handleAddRemediationArg() {
+    remediationArgCounter++;
+    var newRemediationArgInput = "<label for='remediation_args_" + remediationArgCounter + "'>Remediation Arg " + remediationArgCounter + ":</label>";
+    newRemediationArgInput += "<input type='text' id='remediation_args_" + remediationArgCounter + "'><br>";
+    $("#remediationArgsColumns").append(newRemediationArgInput);
+}
+function updateLabelsBasedOnArgumentCounts(setArgumentCount, getArgumentCount) {
+       
+        $("#auditArgsColumns").empty();
+        $("#remediationArgsColumns").empty();
+ 
+       
+        for (let i = 1; i <= setArgumentCount; i++) {
+            $("#auditArgsColumns").append("<label for='audit_args_" + i + "'>Audit Arg " + i + ":</label>" +
+                "<input type='text' id='audit_args_" + i + "'><br>");
+        }
+ 
+        for (let i = 1; i <= getArgumentCount; i++) {
+            $("#remediationArgsColumns").append("<label for='remediation_args_" + i + "'>Remediation Arg " + i + ":</label>" +
+                "<input type='text' id='remediation_args_" + i + "'><br>");
+        }
+}
+ 
+        function handleAddRule() {
+            fetchCheckNames(function (checkNames) {
+            var defaultOperator = '.';
+            var defaultDatatype = '.';
+            var defaultCaseIgnore = '.';
+       
+            var details = "<div id='details'><h2>Add New Rule</h2>";
+                details += "<label for='reference'>Reference:</label><textarea id='referenceInput'></textarea><br>";
+            details += "<label for='check_name'>Check Name:</label>";
+            details += "<select id='check_nameDropdown'>";
+            details += "</select><br>";
+            details += "<label for='check_guid'>Check Guid:</label><input type='text' id='check_guid'><br>";
+            details += "<div style='text-align: left;'><b><label for='comparison_arg' style='font-size: 18px;'>Comparison Arg</label></b></div>";
+                        details += "<div style='margin-top: 10px;'></div>";
+            details += "<label for='comparison_arg'>Value :</label><input type='text' id='comparison_arg'>";
+       
+            details += "<div id='comparisonArgsColumns'>";
+            details += "<label for='datatype'>Datatype:</label>";
+            details += "<select id='datatypeDropdown'>";
+                details += "<option value=''></option>";
+            details += "<option value='string'>String</option>";
+            details += "<option value='number'>Number</option>";
+            details += "<option value='exitcode'>Exit code</option>";
+            details += "</select><br>";
+           
+            details += "<label for='operator'>Operator:</label>";
+            details += "<select id='operatorDropdown'>";
+                details += "<option value=''></option>";
+            details += "<option value='equals'>Equals</option>";
+            details += "<option value='greater than'>Greater Than</option>";
+            details += "<option value='not equals'>Not Equals</option>";
+            details += "<option value='lesser than'>Lesser Than</option>";
+            details += "<option value='less than or equal'>Less Than or equal</option>";
+            details += "<option value='greater than or equal'>Greater Than or equal</option>";
+       
+            details += "<option value='matches re'>Matches RE</option>";
+            details += "<option value='does not matches re'>Does not Matches RE</option>";
+            details += "<option value='matches re'>Matches RE</option>";
+            details += "</select><br>";
+       
+            details += "<label for='case_ignore'>Case Ignore:</label>";
+            details += "<select id='caseIgnoreDropdown'>";
+                details += "<option value=''></option>";
+            details += "<option value='true'>True</option>";
+            details += "<option value='false'>False</option>";
+            details += "</select>";
+            details += "</div>";
+       
+            details += "<br>";
+       
+            details += "<div style='text-align: left;'>";
+            details += "<b><label for='audit_args' style='font-size: 18px;'>Audit Args</label></b>";
+            //details += "<button onclick='handleAddAuditArg()'>+</button>";
+            details += "</div>";
+            details += "<div style='margin-top: 10px;' id='auditArgsColumns'>";
+            details += "<label for='audit_args_1'>Audit Arg 1:</label><input type='text' id='audit_args_1'><br>";
+            details += "</div>";
+ 
+            details += "<div style='text-align: left;'>";
+            details += "<b><label for='remediation_args' style='font-size: 18px;'>Remediation Args</label></b>";
+            //details += "<button onclick='handleAddRemediationArg()'>+</button>";
+            details += "</div>";
+            details += "<div style='margin-top: 10px;' id='remediationArgsColumns'>";
+            details += "<label for='remediation_args_1'>Remediation Arg 1:</label><input type='text' id='remediation_args_1'><br>";
+            details += "</div>";
+    details += "<button onclick='handleSaveClick()'>Save Changes</button>";
+    details += "<button onclick='handleCancelClick()'>Cancel</button></div>";
+   
+    $("#details").html(details);
+    populateCheckNamesDropdown(checkNames);
+    $('#check_nameDropdown').on('change', function () {
+            var selectedCheckName = $(this).val();
+            fetchCheckGuids([selectedCheckName], function (checkGuids) {
+               
+                $('#check_guid').val(checkGuids[0]);
+                $.ajax({
+                        url: 'http://127.0.0.1:5000/get_check_argument_count_by_name',
+                        type: 'GET',
+                        success: function (data) {
+               
+                            var setArgumentCount = data[selectedCheckName].checkSetArgumentCount;
+                            var getArgumentCount = data[selectedCheckName].checkGetArgumentCount;
+ 
+                           
+                            updateLabelsBasedOnArgumentCounts(setArgumentCount, getArgumentCount);
+                        },
+                        error: function (error) {
+                            console.error('Error fetching argument counts:', error);
+                        }
+            });
+        });
+    });
+        $('#details #referenceInput').on('input', function () {
+            editedReference = $(this).val();
+   
+});
+});
+        }
+ 
+ 
+       
+        $("#operatorDropdown").on("change", function () {
+            updateDropdownValues();
+        });
+ 
+        $("#datatypeDropdown").on("change", function () {
+            updateDropdownValues();
+        });
+ 
+        $("#caseIgnoreDropdown").on("change", function () {
+            updateDropdownValues();
+        });
+ 
+        function updateDropdownValues() {
+            var selectedOperator = $("#details #operatorDropdown").val();
+            var selectedDatatype = $("#details #datatypeDropdown").val();
+            var selectedCaseIgnore = $("#details #caseIgnoreDropdown").val();
+ 
+            $("#operatorDropdown").val(selectedOperator);
+ 
+           
+            $("#datatypeDropdown").val(selectedDatatype);
+ 
+           
+            $("#caseIgnoreDropdown").val(selectedCaseIgnore);
+        }
+ 
+        function handleSaveClick() {
+    var reference;
+   
+   
+    if (editedReference) {
+        reference = editedReference;
+    } else {
+        reference = $("#details #referenceInput").val();
+    }
+ 
+    var newRule = "<rule>" +
+        "<reference>" + reference + "</reference>" +
+        "<check_name>" + $("#check_nameDropdown").val() + "</check_name>" +
+        "<check_guid>" + $("#details #check_guid").val() + "</check_guid>";
+ 
+    newRule = addComparisonArgToRule(newRule);
+ 
+    newRule += "<audit_args>";
+ 
+   
+    $("#auditArgsColumns input").each(function(index, element) {
+        var auditArgsValue = $(element).val();
+        if (auditArgsValue.trim() !== "") {
+            newRule += "<value>" + auditArgsValue + "</value>";
+        }
+    });
+ 
+    newRule += "</audit_args>";
+ 
+    newRule = addRemediationArgsToRule(newRule);
+ 
+    newRule += "</rule>";
+ 
+    $(xmlDoc).find("rules").append(newRule);
+ 
+    displayReferencesInTable(xmlDoc);
+    $("#details").empty();
+    editedReference = '';
+}
+ 
+function addRemediationArgsToRule(newRule) {
+    newRule += "<remediation_args>";
+ 
+   
+    $("#remediationArgsColumns input").each(function(index, element) {
+        var remediationArgsValue = $(element).val();
+        if (remediationArgsValue.trim() !== "") {
+            newRule += "<value>" + remediationArgsValue + "</value>";
+        }
+    });
+ 
+    newRule += "</remediation_args>";
+ 
+    return newRule;
+}
+ 
+ 
+ 
+ 
+        function updateRuleFromForm(rule) {
+            var reference = $("#referenceInput").val();
+             rule.find("reference").text(reference);
+            var selectedCheckName = $("#check_nameDropdown").val();
+    var selectedCheckGuid = $("#check_guid").val();
+    rule.find("check_name").text(selectedCheckName);
+    rule.find("check_guid").text(selectedCheckGuid);
+            rule.find("comparison_arg").text($("#comparison_arg").val());
+ 
+            var comparisonArgElement = rule.find("comparison_arg");
+            var selectedOperator = $("#operatorDropdown").val();
+            var selectedDatatype = $("#datatypeDropdown").val();
+            var selectedCaseIgnore = $("#caseIgnoreDropdown").val();
+ 
+            if (selectedOperator || selectedDatatype || selectedCaseIgnore) {
+                comparisonArgElement.attr("operator", selectedOperator || "");
+                comparisonArgElement.attr("datatype", selectedDatatype || "");
+                comparisonArgElement.attr("case_ignore", selectedCaseIgnore || "");
+            } else {
+                comparisonArgElement.removeAttr("operator");
+                comparisonArgElement.removeAttr("datatype");
+                comparisonArgElement.removeAttr("case_ignore");
+            }
+ 
+           
+    var auditArgsValue1 = $("#details #audit_args_1").val();
+    var auditArgsValue2 = $("#details #audit_args_2").val();
+ 
+    rule.find("audit_args value").eq(0).text(auditArgsValue1);
+    rule.find("audit_args value").eq(1).text(auditArgsValue2);
+            var remediationArgsValue1 = $("#details #remediation_args_1").val();
+    var remediationArgsValue2 = $("#details #remediation_args_2").val();
+ 
+    rule.find("remediation_args value").eq(0).text(remediationArgsValue1);
+    rule.find("remediation_args value").eq(1).text(remediationArgsValue2);
+}
+ 
+        function addComparisonArgToRule(newRule) {
+    var selectedOperator = $("#details #operatorDropdown").val();
+    var selectedDatatype = $("#details #datatypeDropdown").val();
+    var selectedCaseIgnore = $("#details #caseIgnoreDropdown").val();
+ 
+    if (selectedOperator || selectedDatatype || selectedCaseIgnore) {
+        newRule += "<comparison_arg operator='" + (selectedOperator || "") + "' datatype='" + (selectedDatatype || "") + "' case_ignore='" + (selectedCaseIgnore || "") + "'>" +
+            $("#details #comparison_arg").val() +
+            "</comparison_arg>";
+    } else {
+        newRule += "<comparison_arg>" + $("#details #comparison_arg").val() + "</comparison_arg>";
+    }
+ 
+   
+    return newRule;
+}
+ 
+ 
+ 
+        function handleSubmitClick() {
+            var xmlString = (new XMLSerializer()).serializeToString(xmlDoc);
+            var blob = new Blob([xmlString], { type: "/xml" });
+            var link = document.createElement("a");
+            link.href = window.URL.createObjectURL(blob);
+            link.download = "updated_rules.xml";
+            link.click();
+        }
+       
+ 
+    </script>
+</head>
+ 
+<body>
+    <h1>Compliance Benchmark Editor</h1>
+    <p>Select a Benchmark XML file: <input type="file" id="fileInput" onchange="handleFileSelect(event)"></p>
+    <div id="additionalFeatures">
+        <p id="title"></p>
+        <p id="description"></p>
+        <p id="applicablePlatformDropdown"></p>
+        <p id="controlLibraryDropdown"></p>
+    </div>
+    <button id="addRuleBtn" onclick="handleAddRule()">Add Rule</button>
+    <div id="details"></div>
+    <div id="referencesTable"></div>
+    <div id="postRemediationsTable"></div> <!-- Post Remediate table -->
+    <button id="addRuleBtn" onclick='handleAddPostRemediation()'>Add New Post Remediation Rule</button>
+    <button id="submitBtn" onclick="handleSubmitClick()">Submit Changes</button>
+</body>
+ 
+</html>
